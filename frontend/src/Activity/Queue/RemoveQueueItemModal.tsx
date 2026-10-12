@@ -26,6 +26,7 @@ interface RemoveQueueItemModalProps {
   canIgnore: boolean;
   isPending: boolean;
   selectedCount?: number;
+  containsMoviePacks?: boolean;
   onRemovePress(props: RemovePressProps): void;
   onModalClose: () => void;
 }
@@ -44,6 +45,7 @@ function RemoveQueueItemModal(props: RemoveQueueItemModalProps) {
     canChangeCategory,
     isPending,
     selectedCount,
+    containsMoviePacks = false,
     onRemovePress,
     onModalClose,
   } = props;
@@ -179,6 +181,9 @@ function RemoveQueueItemModal(props: RemoveQueueItemModalProps) {
 
         <ModalBody>
           <div className={styles.message}>{message}</div>
+          {containsMoviePacks ? (
+            <p>{translate('MoviePackRemovalNotice')}</p>
+          ) : null}
 
           {isPending ? null : (
             <FormGroup>

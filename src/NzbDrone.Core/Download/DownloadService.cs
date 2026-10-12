@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using NLog;
 using NzbDrone.Common.EnsureThat;
@@ -11,7 +14,9 @@ using NzbDrone.Core.Download.Pending;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.Movies.MoviePacks;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Queue;
 
 namespace NzbDrone.Core.Download
 {
@@ -30,6 +35,10 @@ namespace NzbDrone.Core.Download
         private readonly IEventAggregator _eventAggregator;
         private readonly ISeedConfigProvider _seedConfigProvider;
         private readonly Logger _logger;
+        private readonly IMoviePackResolver _moviePacks;
+        private readonly IQueueService _queue;
+        private static readonly SemaphoreSlim PackGrabLock = new SemaphoreSlim(1, 1);
+        private static readonly Dictionary<int, DateTime> RecentPackGrabs = new Dictionary<int, DateTime>();
 
         public DownloadService(IProvideDownloadClient downloadClientProvider,
                                IDownloadClientStatusService downloadClientStatusService,
@@ -38,6 +47,8 @@ namespace NzbDrone.Core.Download
                                IRateLimitService rateLimitService,
                                IEventAggregator eventAggregator,
                                ISeedConfigProvider seedConfigProvider,
+                               IMoviePackResolver moviePacks,
+                               IQueueService queue,
                                Logger logger)
         {
             _downloadClientProvider = downloadClientProvider;
@@ -48,6 +59,8 @@ namespace NzbDrone.Core.Download
             _eventAggregator = eventAggregator;
             _seedConfigProvider = seedConfigProvider;
             _logger = logger;
+            _moviePacks = moviePacks;
+            _queue = queue;
         }
 
         public async Task DownloadReport(RemoteMovie remoteMovie, int? downloadClientId)
@@ -60,7 +73,50 @@ namespace NzbDrone.Core.Download
                 ? _downloadClientProvider.Get(downloadClientId.Value)
                 : _downloadClientProvider.GetDownloadClient(remoteMovie.Release.DownloadProtocol, remoteMovie.Release.IndexerId, filterBlockedClients, tags);
 
-            await DownloadReport(remoteMovie, downloadClient);
+            if (remoteMovie.MoviePack == null)
+            {
+                await DownloadReport(remoteMovie, downloadClient);
+                return;
+            }
+
+            await PackGrabLock.WaitAsync();
+            try
+            {
+                var pack = _moviePacks.Refresh(remoteMovie.MoviePack);
+                if (pack.Error != null || pack.Movies.Any(m => !m.Monitored || !m.QualityProfile.AllowMoviePacks || m.QualityProfile.UpgradeAllowed) || pack.Movies.All(m => m.HasFile))
+                {
+                    throw new DownloadClientRejectedReleaseException(remoteMovie.Release, "Movie pack is no longer eligible for download");
+                }
+
+                var missing = pack.Movies.Where(m => !m.HasFile).ToList();
+                if (missing.Any(m => RecentPackGrabs.TryGetValue(m.Id, out var date) && date > DateTime.UtcNow.AddMinutes(-5)) ||
+                    _queue.GetQueue().Any(q => q.RemoteMovie != null && q.RemoteMovie.GetMovies().Any(m => missing.Any(w => w.Id == m.Id))))
+                {
+                    throw new DownloadClientRejectedReleaseException(remoteMovie.Release, "A movie in this pack is already queued for download");
+                }
+
+                if (downloadClient != null && !downloadClientId.HasValue && missing.Any(m =>
+                    _downloadClientProvider.GetDownloadClient(remoteMovie.Release.DownloadProtocol, remoteMovie.Release.IndexerId, filterBlockedClients, m.Tags)?.Definition.Id != downloadClient.Definition.Id))
+                {
+                    throw new DownloadClientRejectedReleaseException(remoteMovie.Release, "Movies in this pack use different download clients");
+                }
+
+                remoteMovie.Movie = missing.First();
+                await DownloadReport(remoteMovie, downloadClient);
+                foreach (var id in RecentPackGrabs.Where(kv => kv.Value <= DateTime.UtcNow.AddMinutes(-5)).Select(kv => kv.Key).ToList())
+                {
+                    RecentPackGrabs.Remove(id);
+                }
+
+                foreach (var movie in missing)
+                {
+                    RecentPackGrabs[movie.Id] = DateTime.UtcNow;
+                }
+            }
+            finally
+            {
+                PackGrabLock.Release();
+            }
         }
 
         private async Task DownloadReport(RemoteMovie remoteMovie, IDownloadClient downloadClient)
@@ -127,18 +183,20 @@ namespace NzbDrone.Core.Download
                 throw;
             }
 
-            var movieGrabbedEvent = new MovieGrabbedEvent(remoteMovie);
-            movieGrabbedEvent.DownloadClient = downloadClient.Name;
-            movieGrabbedEvent.DownloadClientId = downloadClient.Definition.Id;
-            movieGrabbedEvent.DownloadClientName = downloadClient.Definition.Name;
-
-            if (downloadClientId.IsNotNullOrWhiteSpace())
+            foreach (var movie in remoteMovie.GetMovies())
             {
-                movieGrabbedEvent.DownloadId = downloadClientId;
+                var movieGrabbedEvent = new MovieGrabbedEvent(remoteMovie.ForMovie(movie))
+                {
+                    DownloadClient = downloadClient.Name,
+                    DownloadClientId = downloadClient.Definition.Id,
+                    DownloadClientName = downloadClient.Definition.Name,
+                    DownloadId = downloadClientId.IsNotNullOrWhiteSpace() ? downloadClientId : null
+                };
+
+                _eventAggregator.PublishEvent(movieGrabbedEvent);
             }
 
             _logger.ProgressInfo("Report for {0} ({1}) sent to {2} from indexer {3}. {4}", remoteMovie.Movie.Title, remoteMovie.Movie.Year, downloadClient.Definition.Name, remoteMovie.Release.Indexer, downloadTitle);
-            _eventAggregator.PublishEvent(movieGrabbedEvent);
         }
     }
 }

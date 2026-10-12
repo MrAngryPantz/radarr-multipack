@@ -12,6 +12,7 @@ export interface QualityProfileQualityItem {
 interface QualityProfile {
   name: string;
   upgradeAllowed: boolean;
+  allowMoviePacks: boolean;
   cutoff: number;
   items: QualityProfileQualityItem[];
   minFormatScore: number;

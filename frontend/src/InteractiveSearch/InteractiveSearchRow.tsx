@@ -84,6 +84,7 @@ function InteractiveSearchRow(props: InteractiveSearchRowProps) {
     ageMinutes,
     publishDate,
     title,
+    moviePackTitles,
     infoUrl,
     indexer,
     size,
@@ -181,6 +182,11 @@ function InteractiveSearchRow(props: InteractiveSearchRowProps) {
           <Link to={infoUrl} title={title}>
             {title}
           </Link>
+          {moviePackTitles?.length ? (
+            <div title={moviePackTitles.join(' · ')}>
+              {translate('MoviePackCount', { count: moviePackTitles.length })}
+            </div>
+          ) : null}
         </div>
       </TableRowCell>
 

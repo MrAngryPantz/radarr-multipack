@@ -1,3 +1,4 @@
+using System.Linq;
 using NLog;
 using NzbDrone.Core.Parser.Model;
 
@@ -26,7 +27,7 @@ namespace NzbDrone.Core.DecisionEngine.Specifications.Search
 
             _logger.Debug("Checking if movie matches searched movie");
 
-            if (subject.Movie.Id != searchCriteria.Movie.Id)
+            if (!subject.GetMovies().Any(m => m.Id == searchCriteria.Movie.Id))
             {
                 _logger.Debug("Movie {0} does not match {1}", subject.Movie, searchCriteria.Movie);
                 return DownloadSpecDecision.Reject(DownloadRejectionReason.WrongMovie, "Wrong movie");

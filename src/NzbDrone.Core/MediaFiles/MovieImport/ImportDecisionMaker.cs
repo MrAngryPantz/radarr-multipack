@@ -75,7 +75,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
             ParsedMovieInfo downloadClientItemInfo = null;
 
-            if (downloadClientItem != null)
+            if (downloadClientItem != null && !downloadClientItem.IsMoviePack)
             {
                 downloadClientItemInfo = Parser.Parser.ParseMovieTitle(downloadClientItem.Title);
             }

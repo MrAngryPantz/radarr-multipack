@@ -21,7 +21,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Aggregation.Aggregators.Augmenter
         public AugmentQualityResult AugmentQuality(LocalMovie localMovie, DownloadClientItem downloadClientItem)
         {
             // Don't try to augment if we can't lookup the grabbed history by downloadId
-            if (downloadClientItem == null)
+            if (downloadClientItem == null || downloadClientItem.IsMoviePack)
             {
                 return null;
             }

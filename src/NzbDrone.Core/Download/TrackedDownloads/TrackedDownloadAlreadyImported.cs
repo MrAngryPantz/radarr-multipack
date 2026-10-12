@@ -3,6 +3,7 @@ using System.Linq;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.History;
+using NzbDrone.Core.Movies.MoviePacks;
 
 namespace NzbDrone.Core.Download.TrackedDownloads
 {
@@ -14,15 +15,22 @@ namespace NzbDrone.Core.Download.TrackedDownloads
     public class TrackedDownloadAlreadyImported : ITrackedDownloadAlreadyImported
     {
         private readonly Logger _logger;
+        private readonly IMoviePackImportService _moviePacks;
 
-        public TrackedDownloadAlreadyImported(Logger logger)
+        public TrackedDownloadAlreadyImported(Logger logger, IMoviePackImportService moviePacks)
         {
             _logger = logger;
+            _moviePacks = moviePacks;
         }
 
         public bool IsImported(TrackedDownload trackedDownload, List<MovieHistory> historyItems)
         {
             _logger.Trace("Checking if all movies for '{0}' have been imported", trackedDownload.DownloadItem.Title);
+
+            if (trackedDownload.RemoteMovie?.MoviePack != null)
+            {
+                return _moviePacks.IsComplete(trackedDownload);
+            }
 
             if (historyItems.Empty())
             {

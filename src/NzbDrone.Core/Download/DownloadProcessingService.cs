@@ -40,7 +40,10 @@ namespace NzbDrone.Core.Download
 
             foreach (var trackedDownload in trackedDownloads)
             {
-                _eventAggregator.PublishEvent(new DownloadCanBeRemovedEvent(trackedDownload));
+                if (trackedDownload.RemoteMovie?.MoviePack == null || _completedDownloadService.CanRemove(trackedDownload))
+                {
+                    _eventAggregator.PublishEvent(new DownloadCanBeRemovedEvent(trackedDownload));
+                }
             }
         }
 

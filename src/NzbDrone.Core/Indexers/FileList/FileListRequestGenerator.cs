@@ -24,6 +24,16 @@ namespace NzbDrone.Core.Indexers.FileList
         {
             var pageableRequests = new IndexerPageableRequestChain();
 
+            if (searchCriteria.MoviePackSearch)
+            {
+                foreach (var title in searchCriteria.SceneTitles)
+                {
+                    pageableRequests.Add(GetRequest("search-torrents", $"&type=name&query={Uri.EscapeDataString(title)}"));
+                }
+
+                return pageableRequests;
+            }
+
             if (searchCriteria.Movie.MovieMetadata.Value.ImdbId.IsNotNullOrWhiteSpace())
             {
                 pageableRequests.Add(GetRequest("search-torrents", $"&type=imdb&query={searchCriteria.Movie.MovieMetadata.Value.ImdbId}"));

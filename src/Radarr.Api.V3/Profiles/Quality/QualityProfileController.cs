@@ -65,6 +65,9 @@ namespace Radarr.Api.V3.Profiles.Quality
         [Consumes("application/json")]
         public ActionResult<QualityProfileResource> Update([FromBody] QualityProfileResource resource)
         {
+            // Older clients omit settings they do not know about. Keep this opt-in
+            // setting so an unrelated profile update cannot enable upgrades again.
+            resource.AllowMoviePacks ??= _qualityProfileService.Get(resource.Id).AllowMoviePacks;
             var model = resource.ToModel();
 
             _qualityProfileService.Update(model);

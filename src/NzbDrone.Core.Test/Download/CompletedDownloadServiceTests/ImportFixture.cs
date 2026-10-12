@@ -11,6 +11,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.MoviePacks;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Test.Framework;
@@ -226,6 +227,21 @@ namespace NzbDrone.Core.Test.Download
                   .Verify(v => v.PublishEvent(It.IsAny<DownloadCompletedEvent>()), Times.Once());
 
             _trackedDownload.State.Should().Be(TrackedDownloadState.Imported);
+        }
+
+        [Test]
+        public void should_retain_pack_when_its_last_file_is_rejected()
+        {
+            _trackedDownload.RemoteMovie.MoviePack = new MoviePack();
+            var rejection = new ImportResult(new ImportDecision(new LocalMovie { Path = "sample.mkv" }, new ImportRejection(ImportRejectionReason.Sample, "Sample")), "Sample");
+            Mocker.GetMock<IMoviePackImportService>().Setup(s => s.Import(_trackedDownload)).Returns(new List<ImportResult> { rejection });
+            Mocker.GetMock<IMoviePackImportService>().Setup(s => s.IsComplete(_trackedDownload)).Returns(false);
+
+            Subject.Import(_trackedDownload);
+
+            _trackedDownload.State.Should().Be(TrackedDownloadState.ImportBlocked);
+            Mocker.GetMock<IRejectedImportService>().Verify(s => s.Process(It.IsAny<TrackedDownload>(), It.IsAny<ImportResult>()), Times.Never());
+            VerifyEventNotPublished<DownloadCompletedEvent>();
         }
     }
 }

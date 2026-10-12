@@ -24,6 +24,17 @@ namespace NzbDrone.Core.Indexers.HDBits
         public virtual IndexerPageableRequestChain GetSearchRequests(MovieSearchCriteria searchCriteria)
         {
             var pageableRequests = new IndexerPageableRequestChain();
+
+            if (searchCriteria.MoviePackSearch)
+            {
+                foreach (var title in searchCriteria.SceneTitles)
+                {
+                    pageableRequests.Add(GetRequest(new TorrentQuery { Search = title }));
+                }
+
+                return pageableRequests;
+            }
+
             var query = new TorrentQuery();
 
             if (TryAddSearchParameters(query, searchCriteria))

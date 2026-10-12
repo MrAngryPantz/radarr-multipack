@@ -24,8 +24,9 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
             _logger.Debug("Beginning size check for: {0}", subject);
 
             var quality = subject.ParsedMovieInfo.Quality.Quality;
+            var releaseSize = subject.GetMovieSize(subject.Release.Size);
 
-            if (subject.Release.Size == 0)
+            if (releaseSize == 0)
             {
                 _logger.Debug("Release has unknown size, skipping size check");
                 return DownloadSpecDecision.Accept();
@@ -47,12 +48,12 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
                 minSize = minSize * subject.Movie.MovieMetadata.Value.Runtime;
 
                 // If the parsed size is smaller than minSize we don't want it
-                if (subject.Release.Size < minSize)
+                if (releaseSize < minSize)
                 {
                     var runtimeMessage = subject.Movie.Title;
 
-                    _logger.Debug("Item: {0}, Size: {1} is smaller than minimum allowed size ({2} bytes for {3}), rejecting.", subject, subject.Release.Size, minSize, runtimeMessage);
-                    return DownloadSpecDecision.Reject(DownloadRejectionReason.BelowMinimumSize, "{0} is smaller than minimum allowed {1} (for {2})", subject.Release.Size.SizeSuffix(), minSize.SizeSuffix(), runtimeMessage);
+                    _logger.Debug("Item: {0}, Size: {1} is smaller than minimum allowed size ({2} bytes for {3}), rejecting.", subject, releaseSize, minSize, runtimeMessage);
+                    return DownloadSpecDecision.Reject(DownloadRejectionReason.BelowMinimumSize, "{0} is smaller than minimum allowed {1} (for {2})", releaseSize.SizeSuffix(), minSize.SizeSuffix(), runtimeMessage);
                 }
             }
 
@@ -73,10 +74,10 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
                 maxSize = maxSize * subject.Movie.MovieMetadata.Value.Runtime;
 
                 // If the parsed size is greater than maxSize we don't want it
-                if (subject.Release.Size > maxSize)
+                if (releaseSize > maxSize)
                 {
-                    _logger.Debug("Item: {0}, Size: {1} is greater than maximum allowed size ({2} for {3}), rejecting", subject, subject.Release.Size, maxSize, subject.Movie.Title);
-                    return DownloadSpecDecision.Reject(DownloadRejectionReason.AboveMaximumSize, "{0} is larger than maximum allowed {1} (for {2})", subject.Release.Size.SizeSuffix(), maxSize.SizeSuffix(), subject.Movie.Title);
+                    _logger.Debug("Item: {0}, Size: {1} is greater than maximum allowed size ({2} for {3}), rejecting", subject, releaseSize, maxSize, subject.Movie.Title);
+                    return DownloadSpecDecision.Reject(DownloadRejectionReason.AboveMaximumSize, "{0} is larger than maximum allowed {1} (for {2})", releaseSize.SizeSuffix(), maxSize.SizeSuffix(), subject.Movie.Title);
                 }
             }
 

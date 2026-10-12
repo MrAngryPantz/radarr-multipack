@@ -12,6 +12,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.MoviePacks;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 
@@ -21,6 +22,7 @@ namespace NzbDrone.Core.Download
     {
         void Check(TrackedDownload trackedDownload);
         void Import(TrackedDownload trackedDownload);
+        bool CanRemove(TrackedDownload trackedDownload);
         bool VerifyImport(TrackedDownload trackedDownload, List<ImportResult> importResults);
     }
 
@@ -35,6 +37,7 @@ namespace NzbDrone.Core.Download
         private readonly ITrackedDownloadAlreadyImported _trackedDownloadAlreadyImported;
         private readonly IRejectedImportService _rejectedImportService;
         private readonly Logger _logger;
+        private readonly IMoviePackImportService _moviePacks;
 
         public CompletedDownloadService(IEventAggregator eventAggregator,
                                         IHistoryService historyService,
@@ -44,6 +47,7 @@ namespace NzbDrone.Core.Download
                                         IMovieService movieService,
                                         ITrackedDownloadAlreadyImported trackedDownloadAlreadyImported,
                                         IRejectedImportService rejectedImportService,
+                                        IMoviePackImportService moviePacks,
                                         Logger logger)
         {
             _eventAggregator = eventAggregator;
@@ -55,6 +59,7 @@ namespace NzbDrone.Core.Download
             _trackedDownloadAlreadyImported = trackedDownloadAlreadyImported;
             _rejectedImportService = rejectedImportService;
             _logger = logger;
+            _moviePacks = moviePacks;
         }
 
         public void Check(TrackedDownload trackedDownload)
@@ -65,6 +70,11 @@ namespace NzbDrone.Core.Download
             }
 
             SetImportItem(trackedDownload);
+
+            if (trackedDownload.RemoteMovie?.MoviePack != null && trackedDownload.State == TrackedDownloadState.Imported)
+            {
+                CanRemove(trackedDownload);
+            }
 
             // Only process tracked downloads that are still downloading or have been blocked for importing due to an issue with matching
             if (trackedDownload.State != TrackedDownloadState.Downloading && trackedDownload.State != TrackedDownloadState.ImportBlocked)
@@ -83,6 +93,13 @@ namespace NzbDrone.Core.Download
 
             if (!ValidatePath(trackedDownload))
             {
+                return;
+            }
+
+            if (trackedDownload.RemoteMovie?.MoviePack != null)
+            {
+                trackedDownload.ImportItem.IsMoviePack = true;
+                trackedDownload.State = TrackedDownloadState.ImportPending;
                 return;
             }
 
@@ -139,10 +156,9 @@ namespace NzbDrone.Core.Download
             trackedDownload.State = TrackedDownloadState.Importing;
 
             var outputPath = trackedDownload.ImportItem.OutputPath.FullPath;
-            var importResults = _downloadedMovieImportService.ProcessPath(outputPath,
-                ImportMode.Auto,
-                trackedDownload.RemoteMovie.Movie,
-                trackedDownload.ImportItem);
+            var importResults = trackedDownload.RemoteMovie.MoviePack != null
+                ? _moviePacks.Import(trackedDownload)
+                : _downloadedMovieImportService.ProcessPath(outputPath, ImportMode.Auto, trackedDownload.RemoteMovie.Movie, trackedDownload.ImportItem);
 
             if (VerifyImport(trackedDownload, importResults))
             {
@@ -158,7 +174,7 @@ namespace NzbDrone.Core.Download
                 return;
             }
 
-            if (importResults.Count == 1)
+            if (trackedDownload.RemoteMovie.MoviePack == null && importResults.Count == 1)
             {
                 var firstResult = importResults.First();
 
@@ -193,6 +209,19 @@ namespace NzbDrone.Core.Download
 
         public bool VerifyImport(TrackedDownload trackedDownload, List<ImportResult> importResults)
         {
+            if (trackedDownload.RemoteMovie?.MoviePack != null)
+            {
+                if (!_moviePacks.IsComplete(trackedDownload))
+                {
+                    return false;
+                }
+
+                trackedDownload.State = TrackedDownloadState.Imported;
+                _eventAggregator.PublishEvent(new DownloadCompletedEvent(trackedDownload, trackedDownload.RemoteMovie.Movie.Id));
+
+                return true;
+            }
+
             var allMoviesImported = importResults.Where(c => c.Result == ImportResultType.Imported)
                                        .Select(c => c.ImportDecision.LocalMovie.Movie)
                                        .Any();
@@ -246,6 +275,24 @@ namespace NzbDrone.Core.Download
             return false;
         }
 
+        public bool CanRemove(TrackedDownload trackedDownload)
+        {
+            if (trackedDownload.RemoteMovie?.MoviePack == null)
+            {
+                return true;
+            }
+
+            SetImportItem(trackedDownload);
+            if (ValidatePath(trackedDownload) && _moviePacks.IsComplete(trackedDownload))
+            {
+                return true;
+            }
+
+            trackedDownload.State = TrackedDownloadState.ImportPending;
+            trackedDownload.Warn("Movie pack is incomplete or contains unresolved files; download retained for review");
+            return false;
+        }
+
         private void SetStateToImportBlocked(TrackedDownload trackedDownload)
         {
             trackedDownload.State = TrackedDownloadState.ImportBlocked;
@@ -265,7 +312,9 @@ namespace NzbDrone.Core.Download
 
         private void SetImportItem(TrackedDownload trackedDownload)
         {
+            trackedDownload.DownloadItem.IsMoviePack = trackedDownload.RemoteMovie?.MoviePack != null;
             trackedDownload.ImportItem = _provideImportItemService.ProvideImportItem(trackedDownload.DownloadItem, trackedDownload.ImportItem);
+            trackedDownload.ImportItem.IsMoviePack = trackedDownload.DownloadItem.IsMoviePack;
         }
 
         private bool ValidatePath(TrackedDownload trackedDownload)

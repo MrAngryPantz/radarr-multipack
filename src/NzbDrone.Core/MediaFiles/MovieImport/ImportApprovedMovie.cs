@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
@@ -33,6 +35,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
         private readonly IEventAggregator _eventAggregator;
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly Logger _logger;
+        private static readonly ConcurrentDictionary<int, object> ImportLocks = new ConcurrentDictionary<int, object>();
 
         public ImportApprovedMovie(IUpgradeMediaFiles movieFileUpgrader,
                                    IMediaFileService mediaFileService,
@@ -74,9 +77,18 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             {
                 var localMovie = importDecision.LocalMovie;
                 var oldFiles = new List<DeletedMovieFile>();
-
+                var importLock = ImportLocks.GetOrAdd(localMovie.Movie.Id, _ => new object());
+                Monitor.Enter(importLock);
                 try
                 {
+                    if (newDownload &&
+                        (localMovie.Movie.QualityProfile?.AllowMoviePacks == true || downloadClientItem?.IsMoviePack == true) &&
+                        _mediaFileService.GetFilesByMovie(localMovie.Movie.Id).Any())
+                    {
+                        importResults.Add(new ImportResult(importDecision, "Existing movie file retained; movie packs do not replace library files"));
+                        continue;
+                    }
+
                     // check if already imported
                     if (importResults.Select(r => r.ImportDecision.LocalMovie.Movie)
                                          .Select(m => m.Id).Contains(localMovie.Movie.Id))
@@ -198,6 +210,10 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                 {
                     _logger.Warn(e, "Couldn't import movie " + localMovie);
                     importResults.Add(new ImportResult(importDecision, "Failed to import movie"));
+                }
+                finally
+                {
+                    Monitor.Exit(importLock);
                 }
             }
 

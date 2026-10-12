@@ -11,6 +11,7 @@ using NzbDrone.Core.Download;
 using NzbDrone.Core.History;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.MoviePacks;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 
@@ -36,6 +37,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IConfigService _config;
         private readonly IHistoryService _historyService;
         private readonly Logger _logger;
+        private readonly IMoviePackResolver _moviePacks;
 
         public DownloadedMovieImportService(IDiskProvider diskProvider,
                                                IDiskScanService diskScanService,
@@ -47,6 +49,7 @@ namespace NzbDrone.Core.MediaFiles
                                                IRuntimeInfo runtimeInfo,
                                                IConfigService config,
                                                IHistoryService historyService,
+                                               IMoviePackResolver moviePacks,
                                                Logger logger)
         {
             _diskProvider = diskProvider;
@@ -60,6 +63,7 @@ namespace NzbDrone.Core.MediaFiles
             _config = config;
             _historyService = historyService;
             _logger = logger;
+            _moviePacks = moviePacks;
         }
 
         public List<ImportResult> ProcessRootFolder(DirectoryInfo directoryInfo)
@@ -162,6 +166,12 @@ namespace NzbDrone.Core.MediaFiles
 
         private List<ImportResult> ProcessFolder(DirectoryInfo directoryInfo, ImportMode importMode, DownloadClientItem downloadClientItem)
         {
+            var pack = ResolvePack(directoryInfo, downloadClientItem);
+            if (pack != null)
+            {
+                return ProcessPackFolder(directoryInfo, pack, downloadClientItem);
+            }
+
             var cleanedUpName = GetCleanedUpFolderName(directoryInfo.Name);
             var movie = _parsingService.GetMovie(cleanedUpName);
 
@@ -180,6 +190,12 @@ namespace NzbDrone.Core.MediaFiles
 
         private List<ImportResult> ProcessFolder(DirectoryInfo directoryInfo, ImportMode importMode, Movie movie, DownloadClientItem downloadClientItem)
         {
+            var pack = ResolvePack(directoryInfo, downloadClientItem);
+            if (pack != null)
+            {
+                return ProcessPackFolder(directoryInfo, pack, downloadClientItem);
+            }
+
             if (_movieService.MoviePathExists(directoryInfo.FullName))
             {
                 _logger.Warn("Unable to process folder that is mapped to an existing movie");
@@ -244,6 +260,39 @@ namespace NzbDrone.Core.MediaFiles
             }
 
             return importResults;
+        }
+
+        private MoviePack ResolvePack(DirectoryInfo directory, DownloadClientItem item)
+        {
+            return item?.IsMoviePack == true
+                ? _moviePacks.Restore(item.Title, _historyService.FindByDownloadId(item.DownloadId))
+                : _moviePacks.Resolve(GetCleanedUpFolderName(directory.Name));
+        }
+
+        private List<ImportResult> ProcessPackFolder(DirectoryInfo directory, MoviePack pack, DownloadClientItem item)
+        {
+            if (pack.Error != null || pack.Movies.Any(m => !m.Monitored || m.QualityProfile?.AllowMoviePacks != true || m.QualityProfile.UpgradeAllowed))
+            {
+                return new List<ImportResult> { UnknownMovieResult(pack.Error ?? "All pack members must be monitored and allow movie packs") };
+            }
+
+            var results = new List<ImportResult>();
+            item ??= new DownloadClientItem { Title = directory.Name, OutputPath = new OsPath(directory.FullName) };
+            item.IsMoviePack = true;
+            foreach (var file in _diskScanService.GetVideoFiles(directory.FullName))
+            {
+                var movie = _moviePacks.MatchFile(file, pack);
+                if (movie == null)
+                {
+                    results.Add(UnknownMovieResult("Unable to identify this pack file; manual review is required", file));
+                }
+                else if (!movie.HasFile)
+                {
+                    results.AddRange(ProcessFile(new FileInfo(file), ImportMode.Copy, movie, item));
+                }
+            }
+
+            return results;
         }
 
         private List<ImportResult> ProcessFile(FileInfo fileInfo, ImportMode importMode, DownloadClientItem downloadClientItem)

@@ -40,7 +40,7 @@ namespace NzbDrone.Core.CustomFormats
             {
                 MovieInfo = remoteMovie.ParsedMovieInfo,
                 Movie = remoteMovie.Movie,
-                Size = size,
+                Size = remoteMovie.GetMovieSize(size),
                 Languages = remoteMovie.Languages,
                 IndexerFlags = remoteMovie.Release?.IndexerFlags ?? 0
             };

@@ -54,11 +54,13 @@ namespace NzbDrone.Core.Profiles.Qualities
 
         public QualityProfile Add(QualityProfile profile)
         {
+            profile.UpgradeAllowed &= !profile.AllowMoviePacks;
             return _profileRepository.Insert(profile);
         }
 
         public void Update(QualityProfile profile)
         {
+            profile.UpgradeAllowed &= !profile.AllowMoviePacks;
             _profileRepository.Update(profile);
         }
 

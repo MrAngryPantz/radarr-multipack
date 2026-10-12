@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
@@ -40,6 +41,12 @@ namespace NzbDrone.Core.MediaFiles
             var moveFileResult = new MovieFileMoveResult();
 
             var existingFile = localMovie.Movie.MovieFileId > 0 ? localMovie.Movie.MovieFile : null;
+
+            if ((localMovie.Movie.QualityProfile?.AllowMoviePacks == true || localMovie.DownloadItem?.IsMoviePack == true) &&
+                (existingFile != null || _mediaFileService.GetFilesByMovie(localMovie.Movie.Id).Any()))
+            {
+                throw new IOException("Existing movie file retained; movie packs do not replace library files");
+            }
 
             var rootFolder = _diskProvider.GetParentFolder(localMovie.Movie.Path);
 

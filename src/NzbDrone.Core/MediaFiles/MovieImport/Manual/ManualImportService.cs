@@ -14,6 +14,7 @@ using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.MoviePacks;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Qualities;
@@ -42,6 +43,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
         private readonly ICustomFormatCalculationService _formatCalculator;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
+        private readonly IMoviePackResolver _moviePackResolver;
+        private readonly IMoviePackImportService _moviePackImports;
 
         public ManualImportService(IDiskProvider diskProvider,
                                    IParsingService parsingService,
@@ -55,6 +58,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                                    IMediaFileService mediaFileService,
                                    ICustomFormatCalculationService formatCalculator,
                                    IEventAggregator eventAggregator,
+                                   IMoviePackResolver moviePackResolver,
+                                   IMoviePackImportService moviePackImports,
                                    Logger logger)
         {
             _diskProvider = diskProvider;
@@ -70,6 +75,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             _formatCalculator = formatCalculator;
             _eventAggregator = eventAggregator;
             _logger = logger;
+            _moviePackResolver = moviePackResolver;
+            _moviePackImports = moviePackImports;
         }
 
         public List<ManualImportItem> GetMediaFiles(int movieId)
@@ -155,7 +162,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             var localMovie = new LocalMovie();
             localMovie.Movie = movie;
             localMovie.FileMovieInfo = Parser.Parser.ParseMoviePath(path);
-            localMovie.DownloadClientMovieInfo = downloadClientItem == null ? null : Parser.Parser.ParseMovieTitle(downloadClientItem.Title);
+            localMovie.DownloadClientMovieInfo = downloadClientItem == null || downloadClientItem.IsMoviePack ? null : Parser.Parser.ParseMovieTitle(downloadClientItem.Title);
             localMovie.DownloadItem = downloadClientItem;
             localMovie.Path = path;
             localMovie.SceneSource = SceneSource(movie, rootFolder);
@@ -209,6 +216,12 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             {
                 var trackedDownload = _trackedDownloadService.Find(downloadId);
                 downloadClientItem = trackedDownload.DownloadItem;
+                if (trackedDownload.RemoteMovie?.MoviePack != null && !movieId.HasValue)
+                {
+                    return _diskScanService.GetVideoFiles(baseFolder)
+                        .Select(file => ProcessFile(rootFolder, baseFolder, file, downloadId))
+                        .Where(item => item != null).ToList();
+                }
 
                 if (movie == null)
                 {
@@ -252,6 +265,22 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             {
                 var trackedDownload = GetTrackedDownload(downloadId);
                 var relativeFile = baseFolder.GetRelativePath(file);
+
+                if (trackedDownload?.RemoteMovie?.MoviePack != null)
+                {
+                    movie = _moviePackResolver.MatchFile(file, trackedDownload.RemoteMovie.MoviePack);
+                    if (movie == null)
+                    {
+                        var unmatched = new LocalMovie
+                        {
+                            Path = file,
+                            Quality = QualityParser.ParseQuality(file),
+                            Languages = LanguageParser.ParseLanguages(file),
+                            Size = _diskProvider.GetFileSize(file)
+                        };
+                        return MapItem(new ImportDecision(unmatched, new ImportRejection(ImportRejectionReason.UnknownMovie, "Select the movie for this pack file")), rootFolder, downloadId, null);
+                    }
+                }
 
                 if (movie == null)
                 {
@@ -435,7 +464,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                 if (file.DownloadId.IsNotNullOrWhiteSpace())
                 {
                     trackedDownload = _trackedDownloadService.Find(file.DownloadId);
-                    localMovie.DownloadClientMovieInfo = trackedDownload?.RemoteMovie?.ParsedMovieInfo;
+                    localMovie.DownloadClientMovieInfo = trackedDownload?.RemoteMovie?.MoviePack == null ? trackedDownload?.RemoteMovie?.ParsedMovieInfo : null;
                     localMovie.DownloadItem = trackedDownload?.DownloadItem;
                 }
 
@@ -471,7 +500,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                 }
                 else
                 {
-                    var importResult = _importApprovedMovie.Import(new List<ImportDecision> { importDecision }, true, trackedDownload.DownloadItem, message.ImportMode).First();
+                    var importResult = _importApprovedMovie.Import(new List<ImportDecision> { importDecision }, true, trackedDownload.DownloadItem, trackedDownload.RemoteMovie?.MoviePack != null ? ImportMode.Copy : message.ImportMode).First();
 
                     imported.Add(importResult);
 
@@ -488,6 +517,22 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             foreach (var groupedTrackedDownload in importedTrackedDownload.GroupBy(i => i.TrackedDownload.DownloadItem.DownloadId).ToList())
             {
                 var trackedDownload = groupedTrackedDownload.First().TrackedDownload;
+
+                if (trackedDownload.RemoteMovie?.MoviePack != null)
+                {
+                    if (_moviePackImports.IsComplete(trackedDownload))
+                    {
+                        trackedDownload.State = TrackedDownloadState.Imported;
+                        _eventAggregator.PublishEvent(new DownloadCompletedEvent(trackedDownload, trackedDownload.RemoteMovie.Movie.Id));
+                    }
+                    else
+                    {
+                        trackedDownload.State = TrackedDownloadState.ImportPending;
+                        trackedDownload.Warn("Other movies or unresolved files remain in this pack; download retained for review");
+                    }
+
+                    continue;
+                }
 
                 var importMovie = groupedTrackedDownload.First().ImportResult.ImportDecision.LocalMovie.Movie;
                 var outputPath = trackedDownload.ImportItem.OutputPath.FullPath;

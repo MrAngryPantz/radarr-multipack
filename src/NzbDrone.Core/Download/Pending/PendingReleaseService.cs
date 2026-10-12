@@ -13,6 +13,7 @@ using NzbDrone.Core.Jobs;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Events;
+using NzbDrone.Core.Movies.MoviePacks;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Profiles.Delay;
@@ -51,6 +52,7 @@ namespace NzbDrone.Core.Download.Pending
         private readonly IIndexerFactory _indexerFactory;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
+        private readonly IMoviePackResolver _moviePacks;
 
         public PendingReleaseService(IIndexerStatusService indexerStatusService,
                                      IPendingReleaseRepository repository,
@@ -64,6 +66,7 @@ namespace NzbDrone.Core.Download.Pending
                                      IDownloadClientFactory downloadClientFactory,
                                      IIndexerFactory indexerFactory,
                                      IEventAggregator eventAggregator,
+                                     IMoviePackResolver moviePacks,
                                      Logger logger)
         {
             _indexerStatusService = indexerStatusService;
@@ -79,6 +82,7 @@ namespace NzbDrone.Core.Download.Pending
             _indexerFactory = indexerFactory;
             _eventAggregator = eventAggregator;
             _logger = logger;
+            _moviePacks = moviePacks;
         }
 
         public void Add(DownloadDecision decision, PendingReleaseReason reason)
@@ -283,6 +287,9 @@ namespace NzbDrone.Core.Download.Pending
                 release.RemoteMovie = new RemoteMovie
                 {
                     Movie = movie,
+                    MoviePack = release.Release.MoviePackTmdbIds != null
+                        ? _moviePacks.Refresh(new MoviePack { MovieTmdbIds = release.Release.MoviePackTmdbIds })
+                        : _moviePacks.Resolve(release.Title),
                     MovieMatchType = release.AdditionalInfo?.MovieMatchType ?? MovieMatchType.Unknown,
                     ReleaseSource = release.AdditionalInfo?.ReleaseSource ?? ReleaseSourceType.Unknown,
                     ParsedMovieInfo = release.ParsedMovieInfo,

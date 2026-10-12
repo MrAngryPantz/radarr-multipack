@@ -76,6 +76,14 @@ class EditQualityProfileModalContent extends Component {
   //
   // Listeners
 
+  onMoviePacksChange = ({ value }) => {
+    this.props.onInputChange({ name: 'allowMoviePacks', value });
+
+    if (value) {
+      this.props.onInputChange({ name: 'upgradeAllowed', value: false });
+    }
+  };
+
   onHeaderMeasure = ({ height }) => {
     if (height > this.state.headerHeight) {
       this.setState({ headerHeight: height });
@@ -123,6 +131,7 @@ class EditQualityProfileModalContent extends Component {
       id,
       name,
       upgradeAllowed,
+      allowMoviePacks = { value: false },
       cutoff,
       minFormatScore,
       minUpgradeFormatScore,
@@ -186,6 +195,20 @@ class EditQualityProfileModalContent extends Component {
 
                         <FormGroup size={sizes.EXTRA_SMALL}>
                           <FormLabel size={sizes.SMALL}>
+                            {translate('AllowMoviePacks')}
+                          </FormLabel>
+
+                          <FormInputGroup
+                            type={inputTypes.CHECK}
+                            name="allowMoviePacks"
+                            {...allowMoviePacks}
+                            helpText={translate('AllowMoviePacksHelpText')}
+                            onChange={this.onMoviePacksChange}
+                          />
+                        </FormGroup>
+
+                        <FormGroup size={sizes.EXTRA_SMALL}>
+                          <FormLabel size={sizes.SMALL}>
                             {translate('UpgradesAllowed')}
                           </FormLabel>
 
@@ -193,6 +216,7 @@ class EditQualityProfileModalContent extends Component {
                             type={inputTypes.CHECK}
                             name="upgradeAllowed"
                             {...upgradeAllowed}
+                            isDisabled={allowMoviePacks.value}
                             helpText={translate('UpgradesAllowedHelpText')}
                             onChange={onInputChange}
                           />

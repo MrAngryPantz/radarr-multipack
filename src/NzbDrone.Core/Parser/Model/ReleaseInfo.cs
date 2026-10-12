@@ -17,6 +17,7 @@ namespace NzbDrone.Core.Parser.Model
 
         public string Guid { get; set; }
         public string Title { get; set; }
+        public List<int> MoviePackTmdbIds { get; set; }
         public long Size { get; set; }
         public string DownloadUrl { get; set; }
         public string InfoUrl { get; set; }

@@ -11,6 +11,7 @@ using NzbDrone.Core.History;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Events;
+using NzbDrone.Core.Movies.MoviePacks;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 
@@ -40,6 +41,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
         private readonly ICustomFormatCalculationService _formatCalculator;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
+        private readonly IMoviePackResolver _moviePacks;
 
         private readonly ICached<TrackedDownload> _cache;
 
@@ -50,6 +52,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
                                       ICustomFormatCalculationService formatCalculator,
                                       IEventAggregator eventAggregator,
                                       ICacheManager cacheManager,
+                                      IMoviePackResolver moviePacks,
                                       Logger logger)
         {
             _parsingService = parsingService;
@@ -59,6 +62,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
             _formatCalculator = formatCalculator;
             _eventAggregator = eventAggregator;
             _logger = logger;
+            _moviePacks = moviePacks;
 
             _cache = cacheManager.GetCache<TrackedDownload>(GetType());
         }
@@ -99,6 +103,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
             {
                 LogItemChange(existingItem, existingItem.DownloadItem, downloadItem);
 
+                downloadItem.IsMoviePack = existingItem.RemoteMovie?.MoviePack != null;
                 existingItem.DownloadItem = downloadItem;
                 existingItem.IsTrackable = true;
 
@@ -124,18 +129,18 @@ namespace NzbDrone.Core.Download.TrackedDownloads
                     trackedDownload.State = state;
                 }
 
-                var parsedMovieInfo = Parser.Parser.ParseMovieTitle(trackedDownload.DownloadItem.Title);
+                var historyItems = _historyService.FindByDownloadId(downloadItem.DownloadId)
+                    .OrderByDescending(h => h.Date)
+                    .ToList();
 
-                if (parsedMovieInfo != null)
+                RestorePack(trackedDownload, historyItems);
+                var parsedMovieInfo = trackedDownload.RemoteMovie?.ParsedMovieInfo ?? Parser.Parser.ParseMovieTitle(trackedDownload.DownloadItem.Title);
+                if (trackedDownload.RemoteMovie?.MoviePack == null && parsedMovieInfo != null)
                 {
                     trackedDownload.RemoteMovie = downloadHistory is { EventType: DownloadHistoryEventType.DownloadImported }
                         ? _parsingService.Map(parsedMovieInfo, downloadHistory.MovieId)
                         : _parsingService.Map(parsedMovieInfo, "", 0, null);
                 }
-
-                var historyItems = _historyService.FindByDownloadId(downloadItem.DownloadId)
-                    .OrderByDescending(h => h.Date)
-                    .ToList();
 
                 if (historyItems.Any())
                 {
@@ -145,8 +150,8 @@ namespace NzbDrone.Core.Download.TrackedDownloads
                     trackedDownload.Indexer = grabbedEvent?.Data?.GetValueOrDefault("indexer");
                     trackedDownload.Added = grabbedEvent?.Date;
 
-                    if (parsedMovieInfo == null ||
-                        trackedDownload.RemoteMovie?.Movie == null)
+                    if (trackedDownload.RemoteMovie?.MoviePack == null && (parsedMovieInfo == null ||
+                        trackedDownload.RemoteMovie?.Movie == null))
                     {
                         parsedMovieInfo = Parser.Parser.ParseMovieTitle(firstHistoryItem.SourceTitle);
 
@@ -243,11 +248,41 @@ namespace NzbDrone.Core.Download.TrackedDownloads
 
         private void UpdateCachedItem(TrackedDownload trackedDownload)
         {
+            if (trackedDownload.RemoteMovie?.MoviePack != null)
+            {
+                _moviePacks.Refresh(trackedDownload.RemoteMovie.MoviePack);
+                trackedDownload.RemoteMovie.Movie = trackedDownload.RemoteMovie.MoviePack.Movies.FirstOrDefault();
+                return;
+            }
+
             var parsedMovieInfo = Parser.Parser.ParseMovieTitle(trackedDownload.DownloadItem.Title);
 
             trackedDownload.RemoteMovie = parsedMovieInfo == null ? null : _parsingService.Map(parsedMovieInfo, "", 0, null);
 
             _aggregationService.Augment(trackedDownload.RemoteMovie);
+        }
+
+        private void RestorePack(TrackedDownload trackedDownload, List<MovieHistory> history)
+        {
+            var pack = _moviePacks.Restore(trackedDownload.DownloadItem.Title, history);
+            if (pack == null)
+            {
+                return;
+            }
+
+            trackedDownload.DownloadItem.IsMoviePack = true;
+            trackedDownload.RemoteMovie = new RemoteMovie
+            {
+                MoviePack = pack,
+                Movie = pack.Movies.FirstOrDefault(),
+                ParsedMovieInfo = Parser.Parser.ParseMovieTitle(trackedDownload.DownloadItem.Title) ?? new ParsedMovieInfo
+                {
+                    ReleaseTitle = trackedDownload.DownloadItem.Title,
+                    Quality = QualityParser.ParseQuality(trackedDownload.DownloadItem.Title),
+                    Languages = LanguageParser.ParseLanguages(trackedDownload.DownloadItem.Title)
+                },
+                Release = new ReleaseInfo { Title = trackedDownload.DownloadItem.Title }
+            };
         }
 
         private static TrackedDownloadState GetStateFromHistory(DownloadHistoryEventType eventType)
@@ -286,7 +321,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
         {
             var cachedItems = _cache.Values
                 .Where(t =>
-                    t.RemoteMovie?.Movie == null ||
+                    t.RemoteMovie?.MoviePack != null || t.RemoteMovie?.Movie == null ||
                     message.Movie?.TmdbId == t.RemoteMovie.Movie.TmdbId)
                 .ToList();
 
@@ -302,8 +337,8 @@ namespace NzbDrone.Core.Download.TrackedDownloads
         {
             var cachedItems = _cache.Values
                 .Where(t =>
-                    t.RemoteMovie?.Movie != null &&
-                    (t.RemoteMovie.Movie.Id == message.Movie?.Id || t.RemoteMovie.Movie.TmdbId == message.Movie?.TmdbId))
+                    t.RemoteMovie?.MoviePack != null || (t.RemoteMovie?.Movie != null &&
+                    (t.RemoteMovie.Movie.Id == message.Movie?.Id || t.RemoteMovie.Movie.TmdbId == message.Movie?.TmdbId)))
                 .ToList();
 
             if (cachedItems.Any())
@@ -318,8 +353,8 @@ namespace NzbDrone.Core.Download.TrackedDownloads
         {
             var cachedItems = _cache.Values
                 .Where(t =>
-                    t.RemoteMovie?.Movie != null &&
-                    message.Movies.Any(m => m.Id == t.RemoteMovie.Movie.Id || m.TmdbId == t.RemoteMovie.Movie.TmdbId))
+                    t.RemoteMovie?.MoviePack != null || (t.RemoteMovie?.Movie != null &&
+                    message.Movies.Any(m => m.Id == t.RemoteMovie.Movie.Id || m.TmdbId == t.RemoteMovie.Movie.TmdbId)))
                 .ToList();
 
             if (cachedItems.Any())
@@ -334,8 +369,8 @@ namespace NzbDrone.Core.Download.TrackedDownloads
         {
             var cachedItems = _cache.Values
                 .Where(t =>
-                    t.RemoteMovie?.Movie != null &&
-                    message.Movies.Any(m => m.Id == t.RemoteMovie.Movie.Id || m.TmdbId == t.RemoteMovie.Movie.TmdbId))
+                    t.RemoteMovie?.MoviePack != null || (t.RemoteMovie?.Movie != null &&
+                    message.Movies.Any(m => m.Id == t.RemoteMovie.Movie.Id || m.TmdbId == t.RemoteMovie.Movie.TmdbId)))
                 .ToList();
 
             if (cachedItems.Any())

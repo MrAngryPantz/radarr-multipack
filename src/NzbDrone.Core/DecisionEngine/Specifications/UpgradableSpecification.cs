@@ -30,6 +30,11 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
 
         public UpgradeableRejectReason IsUpgradable(QualityProfile qualityProfile, QualityModel currentQuality, List<CustomFormat> currentCustomFormats, QualityModel newQuality, List<CustomFormat> newCustomFormats)
         {
+            if (qualityProfile.AllowMoviePacks)
+            {
+                return UpgradeableRejectReason.UpgradesNotAllowed;
+            }
+
             var qualityComparer = new QualityModelComparer(qualityProfile);
             var qualityCompare = qualityComparer.Compare(newQuality?.Quality, currentQuality.Quality);
             var downloadPropersAndRepacks = _configService.DownloadPropersAndRepacks;
@@ -123,6 +128,11 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
 
         public bool QualityCutoffNotMet(QualityProfile profile, QualityModel currentQuality, QualityModel newQuality = null)
         {
+            if (profile.AllowMoviePacks)
+            {
+                return false;
+            }
+
             var cutoff = profile.UpgradeAllowed ? profile.Cutoff : profile.FirststAllowedQuality().Id;
             var cutoffCompare = new QualityModelComparer(profile).Compare(currentQuality.Quality.Id, cutoff);
 
@@ -149,6 +159,11 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
 
         public bool CutoffNotMet(QualityProfile profile, QualityModel currentQuality, List<CustomFormat> currentFormats, QualityModel newQuality = null)
         {
+            if (profile.AllowMoviePacks)
+            {
+                return false;
+            }
+
             if (QualityCutoffNotMet(profile, currentQuality, newQuality))
             {
                 return true;
@@ -183,6 +198,11 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
 
         public bool IsUpgradeAllowed(QualityProfile qualityProfile, QualityModel currentQuality, List<CustomFormat> currentCustomFormats, QualityModel newQuality, List<CustomFormat> newCustomFormats)
         {
+            if (qualityProfile.AllowMoviePacks)
+            {
+                return false;
+            }
+
             var isQualityUpgrade = new QualityModelComparer(qualityProfile).Compare(newQuality, currentQuality) > 0;
             var isCustomFormatUpgrade = qualityProfile.CalculateCustomFormatScore(newCustomFormats) > qualityProfile.CalculateCustomFormatScore(currentCustomFormats);
 

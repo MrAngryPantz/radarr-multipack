@@ -37,8 +37,7 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
         public DownloadSpecDecision IsSatisfiedBy(RemoteMovie subject, ReleaseDecisionInformation information)
         {
             var queue = _queueService.GetQueue();
-            var matchingMovies = queue.Where(q => q.RemoteMovie?.Movie != null &&
-                                                   q.RemoteMovie.Movie.Id == subject.Movie.Id)
+            var matchingMovies = queue.Where(q => q.RemoteMovie?.GetMovies().Any(m => m.Id == subject.Movie.Id) == true)
                                        .ToList();
 
             foreach (var queueItem in matchingMovies)
@@ -52,6 +51,11 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
                 if (queueItem.TrackedDownloadState == TrackedDownloadState.FailedPending)
                 {
                     continue;
+                }
+
+                if (subject.Movie.QualityProfile.AllowMoviePacks || queueItem.RemoteMovie.MoviePack != null)
+                {
+                    return DownloadSpecDecision.Reject(DownloadRejectionReason.QueueUpgradesNotAllowed, "Movie is already part of a queued download; movie packs do not upgrade queued releases");
                 }
 
                 var queuedItemCustomFormats = _formatService.ParseCustomFormat(remoteMovie, (long)queueItem.Size);

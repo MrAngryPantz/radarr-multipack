@@ -108,6 +108,28 @@ namespace NzbDrone.Core.Indexers.Newznab
         {
             var pageableRequests = new IndexerPageableRequestChain();
 
+            if (searchCriteria.MoviePackSearch)
+            {
+                var capabilities = _capabilitiesProvider.GetCapabilities(Settings);
+                if (SupportsSearch)
+                {
+                    foreach (var title in TextSearchEngine == "raw" ? searchCriteria.SceneTitles : searchCriteria.CleanSceneTitles)
+                    {
+                        pageableRequests.Add(GetPagedRequests(MaxPages, Settings.Categories, "search", $"&q={NewsnabifyTitle(title)}"));
+                    }
+                }
+
+                if (capabilities.SupportedMovieSearchParameters?.Contains("q") == true)
+                {
+                    foreach (var title in MovieTextSearchEngine == "raw" ? searchCriteria.SceneTitles : searchCriteria.CleanSceneTitles)
+                    {
+                        pageableRequests.Add(GetPagedRequests(MaxPages, Settings.Categories, "movie", $"&q={NewsnabifyTitle(title)}"));
+                    }
+                }
+
+                return pageableRequests;
+            }
+
             AddMovieIdPageableRequests(pageableRequests, MaxPages, Settings.Categories, searchCriteria);
 
             return pageableRequests;

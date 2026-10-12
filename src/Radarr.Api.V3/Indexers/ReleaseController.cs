@@ -90,6 +90,7 @@ namespace Radarr.Api.V3.Indexers
                     remoteMovie = new RemoteMovie
                     {
                         Release = remoteMovie.Release,
+                        MoviePack = remoteMovie.MoviePack,
                         ParsedMovieInfo = remoteMovie.ParsedMovieInfo.JsonClone(),
                         MovieRequested = remoteMovie.MovieRequested,
                         DownloadAllowed = remoteMovie.DownloadAllowed,

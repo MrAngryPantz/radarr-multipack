@@ -346,5 +346,19 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
                   .Verify(v => v.UpgradeMovieFile(It.Is<MovieFile>(e => e.SceneName == firstDecision.LocalMovie.SceneName), _approvedDecisions.First().LocalMovie, false),
                       Times.Once());
         }
+
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        public void should_keep_existing_file_during_manual_pack_import(bool profileEnabled, bool packDownload)
+        {
+            GivenNewDownload();
+            var movie = _approvedDecisions[0].LocalMovie.Movie;
+            movie.QualityProfile.AllowMoviePacks = profileEnabled;
+            _downloadClientItem.IsMoviePack = packDownload;
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(movie.Id)).Returns(new List<MovieFile> { new MovieFile { Id = 61 } });
+            var result = Subject.Import(_approvedDecisions, true, _downloadClientItem, ImportMode.Move);
+            result.Single().Result.Should().Be(ImportResultType.Skipped);
+            Mocker.GetMock<IUpgradeMediaFiles>().Verify(s => s.UpgradeMovieFile(It.IsAny<MovieFile>(), It.IsAny<LocalMovie>(), It.IsAny<bool>()), Times.Never());
+        }
     }
 }

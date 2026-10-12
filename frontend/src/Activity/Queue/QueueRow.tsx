@@ -41,6 +41,7 @@ import styles from './QueueRow.css';
 interface QueueRowProps {
   id: number;
   movieId?: number;
+  moviePackMovieIds?: number[];
   downloadId?: string;
   title: string;
   status: string;
@@ -75,6 +76,7 @@ function QueueRow(props: QueueRowProps) {
   const {
     id,
     movieId,
+    moviePackMovieIds,
     downloadId,
     title,
     status,
@@ -348,6 +350,7 @@ function QueueRow(props: QueueRowProps) {
       <RemoveQueueItemModal
         isOpen={isRemoveQueueItemModalOpen}
         sourceTitle={title}
+        containsMoviePacks={!!moviePackMovieIds?.length}
         canChangeCategory={!!downloadClientHasPostImportCategory}
         canIgnore={!!movie}
         isPending={isPending}

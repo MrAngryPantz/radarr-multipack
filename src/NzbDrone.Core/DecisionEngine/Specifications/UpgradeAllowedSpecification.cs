@@ -27,6 +27,11 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
         {
             var qualityProfile = subject.Movie.QualityProfile;
 
+            if (qualityProfile.AllowMoviePacks && subject.Movie.HasFile)
+            {
+                return DownloadSpecDecision.Reject(DownloadRejectionReason.DiskUpgradesNotAllowed, "Existing movie files are kept while movie packs are enabled");
+            }
+
             if (subject.Movie.MovieFileId != 0)
             {
                 var file = subject.Movie.MovieFile;

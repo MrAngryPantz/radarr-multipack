@@ -25,5 +25,7 @@ public enum ImportRejectionReason
     MultiPartMovie,
     NotQualityUpgrade,
     NotRevisionUpgrade,
-    NotCustomFormatUpgrade
+    NotCustomFormatUpgrade,
+    MoviePackExistingFile,
+    MoviePackProfile
 }

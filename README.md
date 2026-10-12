@@ -1,90 +1,62 @@
-# Radarr
+# Radarr Movie Packs
 
-[![Build Status](https://dev.azure.com/Radarr/Radarr/_apis/build/status/Radarr.Radarr?branchName=develop)](https://dev.azure.com/Radarr/Radarr/_build/latest?definitionId=1&branchName=develop)
-[![Translation status](https://translate.servarr.com/widget/servarr/radarr/svg-badge.svg)](https://translate.servarr.com/engage/servarr/?utm_source=widget)
-[![Docker Pulls](https://img.shields.io/docker/pulls/linuxserver/radarr.svg)](https://wiki.servarr.com/radarr/installation/docker)
-![Github Downloads](https://img.shields.io/github/downloads/Radarr/Radarr/total.svg)
-[![Backers on Open Collective](https://opencollective.com/Radarr/backers/badge.svg)](#backers)
-[![Sponsors on Open Collective](https://opencollective.com/Radarr/sponsors/badge.svg)](#sponsors)
-[![Mega Sponsors on Open Collective](https://opencollective.com/Radarr/megasponsors/badge.svg)](#mega-sponsors)
+This is a fork of [Radarr](https://github.com/Radarr/Radarr) that can automatically download a pack containing several movies. It is intended for filling gaps in a library while keeping the files you already have.
 
-Radarr is a movie collection manager for Usenet and BitTorrent users. It can monitor multiple RSS feeds for new movies and will interface with clients and indexers to grab, sort, and rename them. It can also be configured to automatically upgrade the quality of existing files in the library when a better quality format becomes available.
-Note that only one type of a given movie is supported. If you want both a 4k version and 1080p version of a given movie you will need multiple instances.
+Movie packs are off by default. To enable them, open a quality profile and turn on **Allow Movie Packs**. Radarr turns upgrades off for that profile and keeps them off while the option is enabled. This covers quality upgrades, custom format upgrades, propers and repacks. Turning pack support off does not turn upgrades back on.
 
-## Major Features Include
+## What Radarr can identify
 
-* Adding new movies with lots of information, such as trailers, ratings, etc.
-* Support for major platforms: Windows, Linux, macOS, Raspberry Pi, etc.
-* Can watch for better quality of the movies you have and do an automatic upgrade. _eg. from DVD to Blu-Ray_
-* Automatic failed download handling will try another release if one fails
-* Manual search so you can pick any release or to see why a release was not downloaded automatically
-* Full integration with SABnzbd and NZBGet
-* Automatically searching for releases as well as RSS Sync
-* Automatically importing downloaded movies
-* Recognizing Special Editions, Director's Cut, etc.
-* Identifying releases with hardcoded subs
-* Identifying releases with AKA movie names
-* SABnzbd, NZBGet, QBittorrent, Deluge, rTorrent, Transmission, uTorrent, and other download clients are supported and integrated
-* Full integration with Kodi and Plex (notifications, library updates)
-* Importing Metadata such as trailers or subtitles
-* Adding metadata such as posters and information for Kodi and others to use
-* Advanced customization for profiles, such that Radarr will always download the copy you want
-* A beautiful UI
+A pack must identify a known collection or name its movies explicitly. For example:
 
-## Support
+- `The.Matrix.Trilogy.1999-2003.1080p.BluRay`
+- `The Matrix Collection (1999-2003) 1080p`
+- `The Matrix (1999) + The Matrix Reloaded (2003) 1080p BluRay`
 
-[![Wiki](https://img.shields.io/badge/servarr-wiki-181717.svg?maxAge=60)](https://wiki.servarr.com/radarr)
-[![Discord](https://img.shields.io/badge/discord-chat-7289DA.svg?maxAge=60)](https://radarr.video/discord)
+Refresh the collection in Radarr first. Every movie identified in the pack must already be in your library, be monitored, and use a profile with movie packs enabled. At least one must be missing its file. A stated movie count must agree with the collection metadata; a year range limits the movies considered. Radarr does not guess which three movies an old “trilogy” release means if the collection now contains four.
 
-Note: GitHub Issues are for Bugs and Feature Requests Only
+Actor bundles, vague release names and arbitrary numbered volumes cannot reliably identify their contents. Those need manual review. There is no claim that every pack on every indexer can be recognized automatically.
 
-[![GitHub - Bugs and Feature Requests Only](https://img.shields.io/badge/github-issues-red.svg?maxAge=60)](https://github.com/Radarr/Radarr/issues)
+## Search and import
 
-## Contributors & Developers
+Normal movie searches continue to work. With packs enabled, Radarr also searches by collection title without restricting the request to one movie's ID or year. Newznab and Torznab use the title-search capabilities advertised by the indexer. FileList, HDBits, Nyaa, PassThePopcorn and TorrentPotato use their existing title-search APIs. RSS feeds can supply packs even when the indexer has no search API. This works through Prowlarr or Jackett when the connected indexer exposes the necessary search capability.
 
-[API Documentation](https://radarr.video/docs/api/)
+Packs go through the normal release checks for each missing movie, including allowed quality, language, custom formats, availability, release restrictions, tags, delays, blocklists and minimum seeders. The indexer's total size is apportioned by movie runtime for size comparisons; the actual file is checked again before import. One cached collection query can serve several movie searches without sending duplicate requests to the indexer.
 
-This project exists thanks to all the people who contribute.
-- [Contribute (GitHub)](CONTRIBUTING.md)
-- [Contribution (Wiki Article)](https://wiki.servarr.com/radarr/contributing)
+Each file is matched independently using Radarr's movie matcher. An obfuscated filename can use its immediate folder when that folder identifies an individual movie. The pack title never supplies the identity of every file. Each file's own quality, language, size and custom formats must satisfy its movie's profile.
 
-[![Contributors List](https://opencollective.com/Radarr/contributors.svg?width=890&button=false)](https://github.com/Radarr/Radarr/graphs/contributors)
+Existing movie files are retained. Imports copy or hardlink the source, including for Usenet, until completion is verified. The expected movie list is saved with the grab and survives restarts or later collection changes. Queue entries and history show the individual movies, while the client receives one download. Removing or blocklisting a queue entry applies to the whole pack; the confirmation dialog explains this.
 
-## Backers
+A pack remains incomplete until every expected movie has a file on disk. Unidentified videos and remaining archives also prevent automatic cleanup. Use manual import to identify unresolved videos, or review unwanted extras yourself. Manually importing one movie does not complete the whole pack. A failed pack is blocklisted for all its movies before a replacement search is queued.
 
-Thank you to all our backers! 🙏 [Become a backer](https://opencollective.com/Radarr#backer)
+## Windows and Linux
 
-[![Backers List](https://opencollective.com/Radarr/backers.svg?width=890)](https://opencollective.com/Radarr#backer)
+The fork supports the normal Windows and Linux builds. Windows path handling includes spaces and 8.3 aliases. The Windows package is a self-contained ZIP with the web interface and ffprobe; extract it before running `Radarr.exe` or `Radarr.Console.exe`. It does not require a separate .NET runtime.
 
-## Sponsors
+Use a separate application data directory and port when trying the fork. Keep a backup of your existing Radarr database and disable application updates that would replace this build with upstream Radarr. Media upgrades and application updates are separate settings.
 
-Support this project by becoming a sponsor. Your logo will show up here with a link to your website. [Become a sponsor](https://opencollective.com/Radarr#sponsor)
+## Build and checks
 
-[![Sponsors List](https://opencollective.com/Radarr/sponsors.svg?width=890)](https://opencollective.com/Radarr#sponsor)
+Use the .NET SDK specified in `global.json` and Node.js 20:
 
-## Mega Sponsors
+```sh
+yarn install --frozen-lockfile
+yarn tsc --noEmit --skipLibCheck
+yarn build
+dotnet build src/Radarr.sln
+dotnet test src/Radarr.sln --no-build --no-restore --filter 'Category!=ManualTest&Category!=IntegrationTest&Category!=AutomationTest&Category!=WINDOWS'
+```
 
-[![Mega Sponsors List](https://opencollective.com/Radarr/tiers/mega-sponsor.svg?width=890)](https://opencollective.com/Radarr#mega-sponsor)
+Application type checking skips third-party declaration files because upstream dependencies include conflicting Node type declarations. Build the solution rather than an individual project so the shared analyzer settings are loaded.
 
-## JetBrains
+On Windows, run `scripts/build-windows.ps1`. The ZIP is written to `_artifacts/radarr-multipack-win-x64.zip`.
 
-Thank you to [<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" alt="JetBrains" width="96">](http://www.jetbrains.com/) for providing us with free licenses to their great tools.
+The compatibility workflow builds both platforms, runs the unit suite, and exercises disposable application instances with generated video, simulated indexers and a simulated download client. To run a local trial, install FFmpeg, place ffprobe beside the built application, and run:
 
-* [<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/ReSharper_icon.png" alt="ReSharper" width="32"> ReSharper](http://www.jetbrains.com/resharper/)
-* [<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/WebStorm_icon.png" alt="WebStorm" width="32"> WebStorm](http://www.jetbrains.com/webstorm/)
-* [<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/Rider_icon.png" alt="Rider" width="32"> Rider](http://www.jetbrains.com/rider/)
-* [<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/dotTrace_icon.png" alt="dotTrace" width="32"> dotTrace](http://www.jetbrains.com/dottrace/)
+```sh
+python scripts/test-movie-packs.py --app _output/net8.0/Radarr.dll
+python scripts/test-movie-packs.py --app _output/net8.0/Radarr.dll --grab-method rss
+```
 
-## DigitalOcean
+The trial checks discovery, seeders, duplicate prevention, preservation of existing files, partial imports, restart recovery and manual completion. It uses temporary directories and does not connect to your normal Radarr instance or download media. Native Windows trials can add `--short-paths` to exercise 8.3 aliases.
 
-This project is also supported by DigitalOcean
-<p>
-  <a href="https://www.digitalocean.com/">
-    <img src="https://opensource.nyc3.cdn.digitaloceanspaces.com/attribution/assets/SVG/DO_Logo_horizontal_blue.svg" width="201px">
-  </a>
-</p>
-
-### License
-
-* [GNU GPL v3](http://www.gnu.org/licenses/gpl.html)
-* Copyright 2010-2025
+The design addresses the single-movie assumption discussed in [Radarr issue 3866](https://github.com/Radarr/Radarr/issues/3866) and the file-matching problem discussed in [pull request 11554](https://github.com/Radarr/Radarr/pull/11554). This fork is independent of the upstream project. Radarr's GPL license and copyright notices remain in place.

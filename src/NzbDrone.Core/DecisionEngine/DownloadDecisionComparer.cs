@@ -175,11 +175,11 @@ namespace NzbDrone.Core.DecisionEngine
                     var preferredMovieSize = remoteMovie.Movie.MovieMetadata.Value.Runtime * preferredSize.Value.Megabytes();
 
                     // Calculate closest to the preferred size
-                    return Math.Abs((remoteMovie.Release.Size - preferredMovieSize).Round(200.Megabytes())) * (-1);
+                    return Math.Abs((remoteMovie.GetMovieSize(remoteMovie.Release.Size) - preferredMovieSize).Round(200.Megabytes())) * (-1);
                 }
                 else
                 {
-                    return remoteMovie.Release.Size.Round(200.Megabytes());
+                    return remoteMovie.GetMovieSize(remoteMovie.Release.Size).Round(200.Megabytes());
                 }
             });
 

@@ -15,6 +15,7 @@ namespace NzbDrone.Core.Download
         }
 
         public int MovieId { get; set; }
+        public List<int> MoviePackMovieIds { get; set; }
         public QualityModel Quality { get; set; }
         public string SourceTitle { get; set; }
         public string DownloadClient { get; set; }

@@ -5,6 +5,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Download.TrackedDownloads;
 using NzbDrone.Core.History;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.Movies.MoviePacks;
 using NzbDrone.Core.Parser.Model;
 
 namespace NzbDrone.Core.Download
@@ -42,7 +43,8 @@ namespace NzbDrone.Core.Download
                 return;
             }
 
-            PublishDownloadFailedEvent(history, "Manually marked as failed");
+            var histories = history.Data.ContainsKey(MoviePack.HistoryKey) ? GetGrabbedHistory(downloadId) : new List<MovieHistory> { history };
+            PublishFailures(histories, "Manually marked as failed", null, skipRedownload);
         }
 
         public void MarkAsFailed(TrackedDownload trackedDownload, bool skipRedownload = false)
@@ -51,7 +53,7 @@ namespace NzbDrone.Core.Download
 
             if (history.Any())
             {
-                PublishDownloadFailedEvent(history.First(), "Manually marked as failed", trackedDownload, skipRedownload: skipRedownload);
+                PublishFailures(trackedDownload.RemoteMovie?.MoviePack != null ? history : history.Take(1).ToList(), "Manually marked as failed", trackedDownload, skipRedownload);
             }
         }
 
@@ -104,16 +106,28 @@ namespace NzbDrone.Core.Download
             }
 
             trackedDownload.State = TrackedDownloadState.Failed;
-            PublishDownloadFailedEvent(grabbedItems.First(), failure, trackedDownload);
+            PublishFailures(trackedDownload.RemoteMovie?.MoviePack != null ? grabbedItems : grabbedItems.Take(1).ToList(), failure, trackedDownload, false);
         }
 
-        private void PublishDownloadFailedEvent(MovieHistory historyItem, string message, TrackedDownload trackedDownload = null, bool skipRedownload = false)
+        private void PublishFailures(List<MovieHistory> histories, string message, TrackedDownload trackedDownload, bool skipRedownload)
+        {
+            var members = histories.DistinctBy(h => h.MovieId).ToList();
+            var ids = members.Count > 1 ? members.Select(h => h.MovieId).ToList() : null;
+            for (var index = 0; index < members.Count; index++)
+            {
+                // Blocklist every member before a single replacement search can run.
+                PublishDownloadFailedEvent(members[index], message, trackedDownload, skipRedownload || index < members.Count - 1, ids);
+            }
+        }
+
+        private void PublishDownloadFailedEvent(MovieHistory historyItem, string message, TrackedDownload trackedDownload = null, bool skipRedownload = false, List<int> moviePackMovieIds = null)
         {
             Enum.TryParse(historyItem.Data.GetValueOrDefault(MovieHistory.RELEASE_SOURCE, ReleaseSourceType.Unknown.ToString()), out ReleaseSourceType releaseSource);
 
             var downloadFailedEvent = new DownloadFailedEvent
             {
                 MovieId = historyItem.MovieId,
+                MoviePackMovieIds = moviePackMovieIds,
                 Quality = historyItem.Quality,
                 SourceTitle = historyItem.SourceTitle,
                 DownloadClient = historyItem.Data.GetValueOrDefault(MovieHistory.DOWNLOAD_CLIENT),

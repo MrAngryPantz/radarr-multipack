@@ -174,3 +174,6 @@ node_modules.nosync
 
 # Ignore Jetbrains IntelliJ Workspace Directories
 .idea/
+
+# Python trial cache
+__pycache__/

@@ -25,6 +25,12 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Specifications
 
         public ImportSpecDecision IsSatisfiedBy(LocalMovie localMovie, DownloadClientItem downloadClientItem)
         {
+            if (!localMovie.ExistingFile && localMovie.Movie.HasFile &&
+                (localMovie.Movie.QualityProfile?.AllowMoviePacks == true || downloadClientItem?.IsMoviePack == true))
+            {
+                return ImportSpecDecision.Reject(ImportRejectionReason.MoviePackExistingFile, "Existing movie files are kept when importing movie packs");
+            }
+
             var downloadPropersAndRepacks = _configService.DownloadPropersAndRepacks;
             var qualityProfile = localMovie.Movie.QualityProfile;
             var qualityComparer = new QualityModelComparer(qualityProfile);

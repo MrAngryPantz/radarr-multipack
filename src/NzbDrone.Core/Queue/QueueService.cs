@@ -46,7 +46,10 @@ namespace NzbDrone.Core.Queue
         {
             if (trackedDownload.RemoteMovie != null && trackedDownload.RemoteMovie.Movie != null)
             {
-                yield return MapMovie(trackedDownload, trackedDownload.RemoteMovie.Movie);
+                foreach (var movie in trackedDownload.RemoteMovie.GetMovies())
+                {
+                    yield return MapMovie(trackedDownload, movie);
+                }
             }
             else
             {
@@ -59,7 +62,7 @@ namespace NzbDrone.Core.Queue
             var queue = new Queue
             {
                 Languages = trackedDownload.RemoteMovie?.Languages ?? new List<Language> { Language.Unknown },
-                Quality = trackedDownload.RemoteMovie?.ParsedMovieInfo.Quality ?? new QualityModel(Quality.Unknown),
+                Quality = trackedDownload.RemoteMovie?.ParsedMovieInfo?.Quality ?? new QualityModel(Quality.Unknown),
                 Title = trackedDownload.DownloadItem.Title,
                 Size = trackedDownload.DownloadItem.TotalSize,
                 SizeLeft = trackedDownload.DownloadItem.RemainingSize,
@@ -69,7 +72,7 @@ namespace NzbDrone.Core.Queue
                 TrackedDownloadState = trackedDownload.State,
                 StatusMessages = trackedDownload.StatusMessages.ToList(),
                 ErrorMessage = trackedDownload.DownloadItem.Message,
-                RemoteMovie = trackedDownload.RemoteMovie,
+                RemoteMovie = movie == null ? trackedDownload.RemoteMovie : trackedDownload.RemoteMovie.ForMovie(movie),
                 DownloadId = trackedDownload.DownloadItem.DownloadId,
                 Protocol = trackedDownload.Protocol,
                 Movie = movie,
@@ -81,6 +84,11 @@ namespace NzbDrone.Core.Queue
             };
 
             queue.Id = HashConverter.GetHashInt31($"trackedDownload-{trackedDownload.DownloadClient}-{trackedDownload.DownloadItem.DownloadId}");
+
+            if (trackedDownload.RemoteMovie?.MoviePack != null)
+            {
+                queue.Id = HashConverter.GetHashInt31($"moviePack-{queue.Id}-{movie?.Id}");
+            }
 
             if (queue.TimeLeft.HasValue)
             {

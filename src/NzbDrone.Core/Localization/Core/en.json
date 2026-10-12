@@ -1,4 +1,8 @@
 {
+  "MoviePackRemovalNotice": "This action applies to the whole movie pack, including movies whose rows are not selected.",
+  "MoviePackCount": "Movie pack: {count} movies",
+  "AllowMoviePacks": "Allow Movie Packs",
+  "AllowMoviePacksHelpText": "Download packs of identified, monitored movies to fill gaps in your library. Existing files are kept and all automatic upgrades are disabled.",
   "About": "About",
   "Actions": "Actions",
   "Activity": "Activity",

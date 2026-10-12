@@ -31,6 +31,8 @@ namespace Radarr.Api.V3.Indexers
         public string SubGroup { get; set; }
         public string ReleaseHash { get; set; }
         public string Title { get; set; }
+        public List<int> MoviePackMovieIds { get; set; }
+        public List<string> MoviePackTitles { get; set; }
         public bool SceneSource { get; set; }
         public List<string> MovieTitles { get; set; }
         public List<Language> Languages { get; set; }
@@ -99,6 +101,8 @@ namespace Radarr.Api.V3.Indexers
                 ReleaseGroup = parsedMovieInfo.ReleaseGroup,
                 ReleaseHash = parsedMovieInfo.ReleaseHash,
                 Title = releaseInfo.Title,
+                MoviePackMovieIds = remoteMovie.MoviePack?.Movies.Select(m => m.Id).ToList(),
+                MoviePackTitles = remoteMovie.MoviePack?.Movies.Select(m => $"{m.Title} ({m.Year})").ToList(),
                 MovieTitles = parsedMovieInfo.MovieTitles,
                 Languages = remoteMovie.Languages,
                 MappedMovieId = remoteMovie.Movie?.Id,

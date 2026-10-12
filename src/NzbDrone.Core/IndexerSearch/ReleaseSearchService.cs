@@ -29,12 +29,14 @@ namespace NzbDrone.Core.IndexerSearch
         private readonly IMovieTranslationService _movieTranslationService;
         private readonly IQualityProfileService _qualityProfileService;
         private readonly Logger _logger;
+        private readonly IMoviePackSearchService _moviePacks;
 
         public ReleaseSearchService(IIndexerFactory indexerFactory,
                                 IMakeDownloadDecision makeDownloadDecision,
                                 IMovieService movieService,
                                 IMovieTranslationService movieTranslationService,
                                 IQualityProfileService qualityProfileService,
+                                IMoviePackSearchService moviePacks,
                                 Logger logger)
         {
             _indexerFactory = indexerFactory;
@@ -43,6 +45,7 @@ namespace NzbDrone.Core.IndexerSearch
             _movieTranslationService = movieTranslationService;
             _qualityProfileService = qualityProfileService;
             _logger = logger;
+            _moviePacks = moviePacks;
         }
 
         public async Task<List<DownloadDecision>> MovieSearch(int movieId, bool userInvokedSearch, bool interactiveSearch)
@@ -59,7 +62,19 @@ namespace NzbDrone.Core.IndexerSearch
 
             var searchSpec = Get<MovieSearchCriteria>(movie, userInvokedSearch, interactiveSearch);
 
-            var decisions = await Dispatch(indexer => indexer.Fetch(searchSpec), searchSpec);
+            var decisions = await Dispatch(
+                async indexer =>
+            {
+                var reports = await indexer.Fetch(searchSpec);
+                if (movie.QualityProfile?.AllowMoviePacks == true)
+                {
+                    var packs = await _moviePacks.Search(indexer, searchSpec);
+                    return reports.Concat(packs).ToList();
+                }
+
+                return reports;
+                },
+                searchSpec);
             downloadDecisions.AddRange(decisions);
 
             return DeDupeDecisions(downloadDecisions);

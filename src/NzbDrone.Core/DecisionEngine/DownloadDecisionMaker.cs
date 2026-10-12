@@ -9,6 +9,7 @@ using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.DecisionEngine.Specifications;
 using NzbDrone.Core.Download.Aggregation;
 using NzbDrone.Core.IndexerSearch.Definitions;
+using NzbDrone.Core.Movies.MoviePacks;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 
@@ -26,18 +27,21 @@ namespace NzbDrone.Core.DecisionEngine
         private readonly IParsingService _parsingService;
         private readonly ICustomFormatCalculationService _formatCalculator;
         private readonly IRemoteMovieAggregationService _aggregationService;
+        private readonly IMoviePackResolver _moviePacks;
         private readonly Logger _logger;
 
         public DownloadDecisionMaker(IEnumerable<IDownloadDecisionEngineSpecification> specifications,
                                      IParsingService parsingService,
                                      ICustomFormatCalculationService formatCalculator,
                                      IRemoteMovieAggregationService aggregationService,
+                                     IMoviePackResolver moviePacks,
                                      Logger logger)
         {
             _specifications = specifications;
             _parsingService = parsingService;
             _formatCalculator = formatCalculator;
             _aggregationService = aggregationService;
+            _moviePacks = moviePacks;
             _logger = logger;
         }
 
@@ -73,8 +77,15 @@ namespace NzbDrone.Core.DecisionEngine
                 try
                 {
                     var parsedMovieInfo = Parser.Parser.ParseMovieTitle(report.Title);
+                    var pack = report.MoviePackTmdbIds != null
+                        ? _moviePacks.Refresh(new MoviePack { MovieTmdbIds = report.MoviePackTmdbIds })
+                        : _moviePacks.Resolve(report.Title);
+                    if (pack != null)
+                    {
+                        decision = GetPackDecision(report, pack, parsedMovieInfo, pushedRelease, searchCriteria);
+                    }
 
-                    if (parsedMovieInfo != null && !parsedMovieInfo.PrimaryMovieTitle.IsNullOrWhiteSpace())
+                    if (decision == null && parsedMovieInfo != null && !parsedMovieInfo.PrimaryMovieTitle.IsNullOrWhiteSpace())
                     {
                         var remoteMovie = _parsingService.Map(parsedMovieInfo, report.ImdbId.ToString(), report.TmdbId, searchCriteria);
                         remoteMovie.Release = report;
@@ -98,7 +109,7 @@ namespace NzbDrone.Core.DecisionEngine
                         }
                     }
 
-                    if (searchCriteria != null)
+                    if (decision == null && searchCriteria != null)
                     {
                         if (parsedMovieInfo == null)
                         {
@@ -147,6 +158,73 @@ namespace NzbDrone.Core.DecisionEngine
                     yield return decision;
                 }
             }
+        }
+
+        private DownloadDecision GetPackDecision(ReleaseInfo report, MoviePack pack, ParsedMovieInfo parsed, bool pushedRelease, SearchCriteriaBase searchCriteria)
+        {
+            var remote = new RemoteMovie
+            {
+                Release = report,
+                MoviePack = pack,
+                Movie = pack.Movies.FirstOrDefault(m => !m.HasFile) ?? pack.Movies.FirstOrDefault() ?? searchCriteria?.Movie,
+                MovieMatchType = MovieMatchType.Title,
+                ParsedMovieInfo = parsed ?? new ParsedMovieInfo
+                {
+                    ReleaseTitle = report.Title,
+                    Quality = QualityParser.ParseQuality(report.Title),
+                    Languages = LanguageParser.ParseLanguages(report.Title)
+                },
+                ReleaseSource = GetReleaseSource(pushedRelease, searchCriteria)
+            };
+            remote.Languages = remote.ParsedMovieInfo.Languages;
+
+            if (pack.Error.IsNotNullOrWhiteSpace() || pack.Movies.Count < 2 || pack.MovieTmdbIds.Count != pack.Movies.Count)
+            {
+                return new DownloadDecision(remote, new DownloadRejection(DownloadRejectionReason.MoviePackUnresolved, pack.Error ?? "Unable to identify every movie in the pack"));
+            }
+
+            if (pack.Movies.Any(m => m.QualityProfile?.AllowMoviePacks != true || m.QualityProfile.UpgradeAllowed))
+            {
+                return new DownloadDecision(remote, new DownloadRejection(DownloadRejectionReason.MoviePackNotAllowed, "Every movie in the pack must allow movie packs with upgrades disabled"));
+            }
+
+            if (pack.Movies.Any(m => !m.Monitored))
+            {
+                return new DownloadDecision(remote, new DownloadRejection(DownloadRejectionReason.MovieNotMonitored, "Every movie in the pack must be monitored"));
+            }
+
+            if (searchCriteria != null && !pack.Movies.Any(m => m.Id == searchCriteria.Movie.Id))
+            {
+                return new DownloadDecision(remote, new DownloadRejection(DownloadRejectionReason.WrongMovie, "The pack does not contain the requested movie"));
+            }
+
+            var missing = pack.Movies.Where(m => !m.HasFile).ToList();
+            if (missing.Count == 0)
+            {
+                return new DownloadDecision(remote, new DownloadRejection(DownloadRejectionReason.MoviePackComplete, "All movies in the pack already have files"));
+            }
+
+            report.MoviePackTmdbIds = pack.MovieTmdbIds.ToList();
+            remote.MovieRequested = searchCriteria?.Movie != null && pack.Movies.Any(m => m.Id == searchCriteria.Movie.Id);
+            var rejections = new List<DownloadRejection>();
+            foreach (var movie in missing)
+            {
+                var member = remote.ForMovie(movie);
+                _aggregationService.Augment(member);
+                member.CustomFormats = _formatCalculator.ParseCustomFormat(member, report.Size);
+                member.CustomFormatScore = movie.QualityProfile.CalculateCustomFormatScore(member.CustomFormats);
+                member.DownloadAllowed = true;
+
+                var decision = GetDecisionForReport(member, new ReleaseDecisionInformation(pushedRelease, searchCriteria));
+                rejections.AddRange(decision.Rejections.Select(r => new DownloadRejection(r.Reason, $"{movie.Title}: {r.Message}", r.Type)));
+
+                if (movie.Id == remote.Movie.Id)
+                {
+                    remote = member;
+                }
+            }
+
+            return new DownloadDecision(remote, rejections.ToArray());
         }
 
         private DownloadDecision GetDecisionForReport(RemoteMovie remoteMovie, ReleaseDecisionInformation information)

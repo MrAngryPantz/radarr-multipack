@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.IndexerSearch.Definitions;
@@ -55,7 +56,11 @@ namespace NzbDrone.Core.Indexers.TorrentPotato
                 requestBuilder.AddQueryParam("user", "");
             }
 
-            if (searchCriteria.Movie.ImdbId.IsNotNullOrWhiteSpace())
+            if (searchCriteria.MoviePackSearch)
+            {
+                requestBuilder.AddQueryParam("search", searchCriteria.SceneTitles.First());
+            }
+            else if (searchCriteria.Movie.ImdbId.IsNotNullOrWhiteSpace())
             {
                 requestBuilder.AddQueryParam("imdbid", searchCriteria.Movie.ImdbId);
             }

@@ -143,6 +143,11 @@ namespace NzbDrone.Core.History
                 MovieId = message.Movie.Movie.Id
             };
 
+            if (message.Movie.MoviePack != null)
+            {
+                history.Data.Add(NzbDrone.Core.Movies.MoviePacks.MoviePack.HistoryKey, string.Join(",", message.Movie.MoviePack.MovieTmdbIds));
+            }
+
             history.Data.Add("Indexer", message.Movie.Release.Indexer);
             history.Data.Add("NzbInfoUrl", message.Movie.Release.InfoUrl);
             history.Data.Add("ReleaseGroup", message.Movie.ParsedMovieInfo.ReleaseGroup);

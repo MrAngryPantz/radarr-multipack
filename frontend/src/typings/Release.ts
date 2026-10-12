@@ -11,6 +11,8 @@ interface Release {
   ageMinutes: number;
   publishDate: string;
   title: string;
+  moviePackMovieIds?: number[];
+  moviePackTitles?: string[];
   infoUrl: string;
   indexerId: number;
   indexer: string;

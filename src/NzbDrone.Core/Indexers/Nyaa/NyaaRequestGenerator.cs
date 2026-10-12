@@ -24,7 +24,7 @@ namespace NzbDrone.Core.Indexers.Nyaa
 
             foreach (var queryTitle in searchCriteria.SceneTitles)
             {
-                pageableRequests.Add(GetPagedRequests(PrepareQuery($"{queryTitle} {searchCriteria.Movie.Year}")));
+                pageableRequests.Add(GetPagedRequests(PrepareQuery(searchCriteria.MoviePackSearch ? queryTitle : $"{queryTitle} {searchCriteria.Movie.Year}")));
             }
 
             return pageableRequests;

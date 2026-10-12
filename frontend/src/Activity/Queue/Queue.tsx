@@ -359,6 +359,10 @@ function Queue() {
       <RemoveQueueItemModal
         isOpen={isConfirmRemoveModalOpen}
         selectedCount={selectedCount}
+        containsMoviePacks={items.some(
+          (item) =>
+            selectedIds.includes(item.id) && !!item.moviePackMovieIds?.length
+        )}
         canChangeCategory={
           isConfirmRemoveModalOpen &&
           selectedIds.every((id) => {

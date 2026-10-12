@@ -12,6 +12,7 @@ namespace Radarr.Api.V3.Profiles.Quality
     {
         public string Name { get; set; }
         public bool UpgradeAllowed { get; set; }
+        public bool? AllowMoviePacks { get; set; }
         public int Cutoff { get; set; }
         public List<QualityProfileQualityItemResource> Items { get; set; }
         public int MinFormatScore { get; set; }
@@ -54,7 +55,8 @@ namespace Radarr.Api.V3.Profiles.Quality
             {
                 Id = model.Id,
                 Name = model.Name,
-                UpgradeAllowed = model.UpgradeAllowed,
+                UpgradeAllowed = model.UpgradeAllowed && !model.AllowMoviePacks,
+                AllowMoviePacks = model.AllowMoviePacks,
                 Cutoff = model.Cutoff,
                 Items = model.Items.ConvertAll(ToResource),
                 MinFormatScore = model.MinFormatScore,
@@ -103,7 +105,8 @@ namespace Radarr.Api.V3.Profiles.Quality
             {
                 Id = resource.Id,
                 Name = resource.Name,
-                UpgradeAllowed = resource.UpgradeAllowed,
+                UpgradeAllowed = resource.UpgradeAllowed && resource.AllowMoviePacks != true,
+                AllowMoviePacks = resource.AllowMoviePacks == true,
                 Cutoff = resource.Cutoff,
                 Items = resource.Items.ConvertAll(ToModel),
                 MinFormatScore = resource.MinFormatScore,

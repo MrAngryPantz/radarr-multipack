@@ -1,13 +1,16 @@
+using System.Collections.Generic;
 using System.IO;
 using FizzWare.NBuilder;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Download;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Profiles.Qualities;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -85,6 +88,7 @@ namespace NzbDrone.Core.Test.MediaFiles
                 .Returns(false);
 
             Subject.UpgradeMovieFile(_movieFile, _localMovie);
+            ExceptionVerification.ExpectedWarns(1);
 
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Delete(_localMovie.Movie.MovieFile, DeleteMediaFileReason.Upgrade), Times.Once());
         }
@@ -99,6 +103,7 @@ namespace NzbDrone.Core.Test.MediaFiles
                 .Returns(false);
 
             Subject.UpgradeMovieFile(_movieFile, _localMovie);
+            ExceptionVerification.ExpectedWarns(1);
 
             Mocker.GetMock<IRecycleBinProvider>().Verify(v => v.DeleteFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
         }
@@ -123,6 +128,18 @@ namespace NzbDrone.Core.Test.MediaFiles
             Assert.Throws<RootFolderNotFoundException>(() => Subject.UpgradeMovieFile(_movieFile, _localMovie));
 
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Delete(_localMovie.Movie.MovieFile, DeleteMediaFileReason.Upgrade), Times.Never());
+        }
+
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        public void should_preserve_existing_file_for_pack_even_with_stale_movie_object(bool profileEnabled, bool packDownload)
+        {
+            _localMovie.Movie.QualityProfile = new QualityProfile { AllowMoviePacks = profileEnabled };
+            _localMovie.DownloadItem = new DownloadClientItem { IsMoviePack = packDownload };
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(_localMovie.Movie.Id)).Returns(new List<MovieFile> { new MovieFile { Id = 51 } });
+            Assert.Throws<IOException>(() => Subject.UpgradeMovieFile(_movieFile, _localMovie));
+            Mocker.GetMock<IRecycleBinProvider>().Verify(s => s.DeleteFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());
         }
     }
 }

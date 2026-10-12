@@ -22,6 +22,7 @@ namespace Radarr.Api.V3.Queue
         public int CustomFormatScore { get; set; }
         public decimal Size { get; set; }
         public string Title { get; set; }
+        public List<int> MoviePackMovieIds { get; set; }
 
         // Collides with existing properties due to case-insensitive deserialization
         // public decimal SizeLeft { get; set; }
@@ -71,6 +72,7 @@ namespace Radarr.Api.V3.Queue
                 CustomFormatScore = customFormatScore,
                 Size = model.Size,
                 Title = model.Title,
+                MoviePackMovieIds = model.RemoteMovie?.MoviePack?.Movies.Select(m => m.Id).ToList(),
 
                 // Collides with existing properties due to case-insensitive deserialization
                 // SizeLeft = model.SizeLeft,

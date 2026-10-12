@@ -7,6 +7,8 @@ using NzbDrone.Common.Http;
 using NzbDrone.Core.Indexers.Newznab;
 using NzbDrone.Core.Test.Framework;
 
+using NzbDrone.Test.Common;
+
 namespace NzbDrone.Core.Test.IndexerTests.NewznabTests
 {
     [TestFixture]
@@ -91,6 +93,7 @@ namespace NzbDrone.Core.Test.IndexerTests.NewznabTests
             GivenCapsResponse(_caps.Replace("5030", "asdf"));
 
             var result = Subject.GetCapabilities(_settings);
+            ExceptionVerification.ExpectedErrors(1);
 
             result.Should().NotBeNull();
         }

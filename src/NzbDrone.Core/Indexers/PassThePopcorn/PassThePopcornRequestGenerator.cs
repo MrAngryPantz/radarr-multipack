@@ -28,6 +28,16 @@ namespace NzbDrone.Core.Indexers.PassThePopcorn
         {
             var pageableRequests = new IndexerPageableRequestChain();
 
+            if (searchCriteria.MoviePackSearch)
+            {
+                foreach (var title in searchCriteria.SceneTitles)
+                {
+                    pageableRequests.Add(GetRequest(Uri.EscapeDataString(title)));
+                }
+
+                return pageableRequests;
+            }
+
             if (searchCriteria.Movie.MovieMetadata.Value.ImdbId.IsNotNullOrWhiteSpace())
             {
                 pageableRequests.Add(GetRequest(searchCriteria.Movie.MovieMetadata.Value.ImdbId));
