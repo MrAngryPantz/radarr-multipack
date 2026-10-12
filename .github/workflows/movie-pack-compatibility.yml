@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y --no-install-recommends ffmpeg
           ln -sf /usr/bin/ffprobe _output/net8.0/ffprobe
           python scripts/test-movie-packs.py --app _output/net8.0/Radarr.dll
           python scripts/test-movie-packs.py --app _output/net8.0/Radarr.dll --grab-method rss
