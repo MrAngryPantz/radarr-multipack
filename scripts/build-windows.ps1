@@ -9,7 +9,7 @@ try {
     if (-not $SkipUi) {
         & yarn.cmd install --frozen-lockfile
         if ($LASTEXITCODE -ne 0) { throw 'Installing frontend dependencies failed.' }
-        & yarn.cmd build
+        & yarn.cmd build --env production
         if ($LASTEXITCODE -ne 0) { throw 'Building the frontend failed.' }
     }
 

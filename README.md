@@ -41,7 +41,7 @@ Use the .NET SDK specified in `global.json` and Node.js 20:
 ```sh
 yarn install --frozen-lockfile
 yarn tsc --noEmit --skipLibCheck
-yarn build
+yarn build --env production
 dotnet build src/Radarr.sln
 dotnet test src/Radarr.sln --no-build --no-restore --filter 'Category!=ManualTest&Category!=IntegrationTest&Category!=AutomationTest&Category!=WINDOWS'
 ```
