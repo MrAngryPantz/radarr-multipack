@@ -34,13 +34,13 @@ namespace NzbDrone.Core.Test.MoviesTests.MoviePacks
             Mocker.GetMock<IMoviePackResolver>().Setup(s => s.Resolve("Example Collection")).Returns(pack);
             Mocker.GetMock<IMoviePackResolver>().Setup(s => s.MatchFile(firstPath, pack)).Returns(first);
             Mocker.GetMock<IMoviePackResolver>().Setup(s => s.MatchFile(secondPath, pack)).Returns(second);
-            Mocker.GetMock<IMakeImportDecision>().Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), It.IsAny<Movie>(), It.IsAny<DownloadClientItem>(), It.IsAny<ParsedMovieInfo>(), true, true)).Returns(new List<ImportDecision>());
+            Mocker.GetMock<IMakeImportDecision>().Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), It.IsAny<Movie>(), It.IsAny<DownloadClientItem>(), It.IsAny<ParsedMovieInfo>(), true)).Returns(new List<ImportDecision>());
             Mocker.GetMock<IImportApprovedMovie>().Setup(s => s.Import(It.IsAny<List<ImportDecision>>(), true, It.IsAny<DownloadClientItem>(), ImportMode.Copy)).Returns(new List<ImportResult>());
 
             Subject.ProcessPath(path, ImportMode.Move, first).Should().ContainSingle(r => r.Result == ImportResultType.Rejected);
 
-            Mocker.GetMock<IMakeImportDecision>().Verify(s => s.GetImportDecisions(It.Is<List<string>>(files => files.Count == 1 && files[0] == firstPath), first, It.Is<DownloadClientItem>(i => i.IsMoviePack), null, true, true), Times.Once());
-            Mocker.GetMock<IMakeImportDecision>().Verify(s => s.GetImportDecisions(It.Is<List<string>>(files => files.Count == 1 && files[0] == secondPath), second, It.Is<DownloadClientItem>(i => i.IsMoviePack), null, true, true), Times.Once());
+            Mocker.GetMock<IMakeImportDecision>().Verify(s => s.GetImportDecisions(It.Is<List<string>>(files => files.Count == 1 && files[0] == firstPath), first, It.Is<DownloadClientItem>(i => i.IsMoviePack), null, true), Times.Once());
+            Mocker.GetMock<IMakeImportDecision>().Verify(s => s.GetImportDecisions(It.Is<List<string>>(files => files.Count == 1 && files[0] == secondPath), second, It.Is<DownloadClientItem>(i => i.IsMoviePack), null, true), Times.Once());
             Mocker.GetMock<IImportApprovedMovie>().Verify(s => s.Import(It.IsAny<List<ImportDecision>>(), true, It.IsAny<DownloadClientItem>(), ImportMode.Copy), Times.Exactly(2));
             Mocker.GetMock<IDiskProvider>().Verify(s => s.DeleteFolder(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
         }
